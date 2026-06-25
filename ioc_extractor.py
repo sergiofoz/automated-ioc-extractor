@@ -227,7 +227,7 @@ def extract_results(data, output_folder):
         domains_output_path = os.path.join(output_folder, "domains_results.txt")
         with open(domains_output_path, 'w') as f:
             for entry in network['domains']:
-                f.write('\n'.join(f"{entry['domain']};{entry['ip']}"))
+                f.write(f"{entry['domain']};{entry['ip']}\n")
 
     except Exception as e:
         print(f"Error: {e}")
@@ -242,7 +242,13 @@ def phase2(file_path, output_folder):
     # Run CAPE
     command = f"{poetry_python}/bin/python /opt/CAPEv2/utils/submit.py --timeout 60 {file_path}"
     result = subprocess.run(command, shell=True, capture_output=True, text=True)
-    task_id = int(re.search(r'ID (\d+)', result.stdout).group(1))
+    match = re.search(r'ID (\d+)', result.stdout)
+    if not match:
+        raise RuntimeError(
+            f"Could not parse task ID from CAPE submit output.\n"
+            f"stdout: {result.stdout}\nstderr: {result.stderr}"
+        )
+    task_id = int(match.group(1))
     report_path = f"/opt/CAPEv2/storage/analyses/{task_id}/reports/report.json"
     dump_path =  f"/opt/CAPEv2/storage/analyses/{task_id}/memory/memdump.raw.zst"
 
@@ -287,7 +293,7 @@ def apply_filters(plugin_name, output):
     patterns = {
         "windows.netscan": r"(\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b|http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\(\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+)",
         "windows.cmdline": r"(base64|EncodedCommand|wscript|powershell|cmd\.exe)",
-        "windows.ldrmodule": r"(.*True.*False.*True.*\n)",
+        "windows.ldrmodule": r"(.*True.*False.*True.*)",
         "windows.dlllist": r"(AppData|Temp|random\.dll)",
         "windows.handles": r"(Temp|RunOnce|Run|Registry|HKEY|startup|NamedPipe|CurrentVersion|Security Center|Winlogon)",
         "windows.filescan": r"(\.exe|\.dll|\.tmp|\.scr|\.sys|\.bat|\.ps1|\.js|\.hta)",
@@ -324,6 +330,8 @@ def run_volatility(plugin_name, memdump_file, pid=None, extra_args=None, output_
         filtered_output_file = os.path.join(filtered_output_folder, f"{plugin_name}.{pid}_results.txt")
         with open(filtered_output_file, 'w') as f:
             f.write(apply_filters(plugin_name, result.stdout))
+
+    return f"{plugin_name}.{pid if pid else 'all'}", result.stdout
 
 def get_pids(memdump_file):
     try:
@@ -364,9 +372,10 @@ def get_pids(memdump_file):
             traverse_tree(process)
 
         return children_pids
-    
+
     except Exception as e:
-        return [], f"Error: {e}"
+        print(f"Error getting PIDs: {e}")
+        return []
     
 def prepare_dump(memdump_path):
     memdump_dir = os.path.dirname(memdump_path)

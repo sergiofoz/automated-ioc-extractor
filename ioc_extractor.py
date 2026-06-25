@@ -270,16 +270,23 @@ def phase2(file_path, output_folder):
     start_time = time.time()
     timeout = 200
     interval = 15
-    # Wait for report to be created
-    while not os.path.exists(report_path):
-        if time.time() - start_time > timeout:
-            raise TimeoutError(f"report.json not found within {timeout} seconds.")
-        print(f"Waiting for {report_path} to exist...")
-        time.sleep(interval)
-
-    # Open report.json file
-    with open(report_path, 'r') as file:
-        data = json.load(file)
+    # Wait for report.json to be present AND fully written. CAPE creates the
+    # file before it finishes writing it, so checking existence alone can race
+    # with the writer and feed json.load a truncated document. Retry the parse
+    # until it succeeds (or we time out).
+    data = None
+    while True:
+        try:
+            with open(report_path, 'r') as report_file:
+                data = json.load(report_file)
+            break
+        except (FileNotFoundError, json.JSONDecodeError) as e:
+            if time.time() - start_time > timeout:
+                raise TimeoutError(
+                    f"report.json not available within {timeout} seconds ({e})."
+                )
+            print(f"Waiting for a complete {report_path} ...")
+            time.sleep(interval)
 
     output_folder = f"{output_folder}/dynamic"
     os.makedirs(output_folder, exist_ok=True)

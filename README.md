@@ -118,3 +118,19 @@ For additional options, check usage with
 ```
 ./ioc_extractor.py --help
 ```
+
+---
+
+# Tests
+
+The repository ships with unit tests for the pure-logic helpers (IOC
+filtering and result extraction) that do not require the external analysis
+tools or a running CAPE instance.
+
+Install `pytest` (if it is not already available) and run the suite from the
+repository root:
+
+```bash
+pip install pytest
+python3 -m pytest tests/
+```

@@ -472,37 +472,63 @@ def generate_report(args):
     def static_analysis():
         data = {}
 
+        # Extract a single value; if the source file is missing or malformed
+        # (e.g. a non-PE sample, or a tool that produced no output), record
+        # "N/A" and keep going instead of aborting the whole report.
+        def safe_extract(key, extractor, default="N/A"):
+            try:
+                data[key] = extractor()
+            except Exception as e:
+                print(f"Warning: could not extract '{key}': {e}")
+                data[key] = default
+
         # Helper to process key-value files
         def process_key_value_file(file_path, exclude_keys=None):
             exclude_keys = exclude_keys or []
-            with open(file_path, "r") as f:
-                for line in f:
-                    key, value = map(str.strip, line.split(":", 1))
-                    if key not in exclude_keys:
-                        data[key] = value
+            try:
+                with open(file_path, "r") as f:
+                    for line in f:
+                        if ":" not in line:
+                            continue
+                        key, value = map(str.strip, line.split(":", 1))
+                        if key not in exclude_keys:
+                            data[key] = value
+            except Exception as e:
+                print(f"Warning: could not process '{file_path}': {e}")
 
         process_key_value_file(f"{static_dir}/exiftool_result.txt", exclude_keys=["ExifTool Version Number"])
-        data["MD5 Hash"] = open(f"{static_dir}/md5sum_result.txt").readline().split()[0]
-        data["SHA256 Hash"] = open(f"{static_dir}/sha256sum_result.txt").readline().split()[0]
+        safe_extract("MD5 Hash", lambda: open(f"{static_dir}/md5sum_result.txt").readline().split()[0])
+        safe_extract("SHA256 Hash", lambda: open(f"{static_dir}/sha256sum_result.txt").readline().split()[0])
 
-        with open(f"{static_dir}/ssdeep_result.txt") as f:
-            lines = f.readlines()
-            if len(lines) > 1:
-                data["SSDEEP Hash"] = lines[1].split(",")[0]
+        try:
+            with open(f"{static_dir}/ssdeep_result.txt") as f:
+                lines = f.readlines()
+                if len(lines) > 1:
+                    data["SSDEEP Hash"] = lines[1].split(",")[0]
+        except Exception as e:
+            print(f"Warning: could not extract 'SSDEEP Hash': {e}")
 
-        data["ImpHash"] = open(f"{static_dir}/imphash_result.txt").readline().strip()
+        safe_extract("ImpHash", lambda: open(f"{static_dir}/imphash_result.txt").readline().strip())
 
-        with open(f"{static_dir}/diec_result.txt", "r") as f:
-            diec_data = json.load(f)
-            data["PE Status"] = diec_data["status"]
-            data["Entropy"] = round(diec_data["total"], 2)
+        try:
+            with open(f"{static_dir}/diec_result.txt", "r") as f:
+                diec_data = json.load(f)
+                data["PE Status"] = diec_data["status"]
+                data["Entropy"] = round(diec_data["total"], 2)
+        except Exception as e:
+            print(f"Warning: could not extract DIE info: {e}")
+            data["PE Status"] = "N/A"
+            data["Entropy"] = "N/A"
 
-        data["AVClass"] = open(f"{static_dir}/avclass_result.txt").readline().split("\t")[1].strip()
+        safe_extract("AVClass", lambda: open(f"{static_dir}/avclass_result.txt").readline().split("\t")[1].strip())
 
-        with open(f"{static_dir}/yara_result.txt", "r") as yara_file:
-            yara_lines = [line.strip() for line in yara_file if line.strip()]
-            for idx, line in enumerate(yara_lines, start=1):
-                data[f"YARA_{idx}"] = line
+        try:
+            with open(f"{static_dir}/yara_result.txt", "r") as yara_file:
+                yara_lines = [line.strip() for line in yara_file if line.strip()]
+                for idx, line in enumerate(yara_lines, start=1):
+                    data[f"YARA_{idx}"] = line
+        except Exception as e:
+            print(f"Warning: could not read YARA results: {e}")
 
         table = PrettyTable()
         table.field_names = ["Attribute", "Value"]

@@ -7,6 +7,7 @@ import hashlib
 import re
 import json
 import shlex
+import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import configparser
 import time
@@ -40,12 +41,17 @@ def avclass(file_path, output_folder, api_key):
         for byte_block in iter(lambda: f.read(4096),b""):
             sha256_hash.update(byte_block)
     sha256 = sha256_hash.hexdigest()
-    vt_command = [
-        "curl", f"https://www.virustotal.com/api/v3/files/{sha256}",
-        "--header", f"X-Apikey: {api_key}",
-    ]
-    run_tool(vt_command, output_file='virustotal_result.txt', output_folder=output_folder)
-    av_command = ["avclass", "-f", os.path.join(output_folder, "virustotal_result.txt")]
+    # Query VirusTotal with requests so the API key is passed in an HTTP
+    # header instead of on the command line (where it would be visible in the
+    # process list).
+    vt_result_path = os.path.join(output_folder, "virustotal_result.txt")
+    response = requests.get(
+        f"https://www.virustotal.com/api/v3/files/{sha256}",
+        headers={"X-Apikey": api_key},
+    )
+    with open(vt_result_path, "w") as f:
+        f.write(response.text)
+    av_command = ["avclass", "-f", vt_result_path]
     output = run_tool(av_command, output_file='avclass_result.txt', output_folder=output_folder)
     return output
 

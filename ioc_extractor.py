@@ -626,30 +626,48 @@ def main():
         args.phase1 = args.phase2 = args.phase3 = False
 
     if args.phase1:
-        phase1(file_path, args, output_folder)
+        try:
+            phase1(file_path, args, output_folder)
+        except Exception as e:
+            print(f"Phase 1 (static analysis) failed: {e}")
 
     dump_path = None
     if args.phase2:
-        dump_path = phase2(file_path, output_folder) #, args, output_folder)
+        try:
+            dump_path = phase2(file_path, output_folder) #, args, output_folder)
+        except Exception as e:
+            print(f"Phase 2 (dynamic analysis) failed: {e}")
 
     # run phase3 after phase2
     if args.phase2 and args.phase3:
         if dump_path:
-            phase3(dump_path, args, output_folder)
+            try:
+                phase3(dump_path, args, output_folder)
+            except Exception as e:
+                print(f"Phase 3 (memory forensics) failed: {e}")
     # run only phase 3
-    else: 
+    else:
         if args.phase3:
             if not args.memdump:
                 print("Memory dump file is required for Phase 3.")
                 sys.exit(1)
-            phase3(args.memdump, args, output_folder)
-    
+            try:
+                phase3(args.memdump, args, output_folder)
+            except Exception as e:
+                print(f"Phase 3 (memory forensics) failed: {e}")
+
     if args.phase1 and args.phase2 and args.phase3:
-        generate_report(args)
+        try:
+            generate_report(args)
+        except Exception as e:
+            print(f"Report generation failed: {e}")
     elif args.report:
         if not args.output_folder:
             print("Output folder required for generating report.")
-        generate_report(args)
+        try:
+            generate_report(args)
+        except Exception as e:
+            print(f"Report generation failed: {e}")
 
 if __name__ == "__main__":
     main()

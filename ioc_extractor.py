@@ -27,6 +27,12 @@ def run_tool(command, output_file=None, output_folder=None):
     # interpolated values cannot be interpreted as shell metacharacters.
     print(f"Executing command: {shlex.join(command)}")
     result = subprocess.run(command, capture_output=True, text=True)
+    # Surface failures (non-zero exit or stderr output) on the console so they
+    # are not silently lost. stdout still goes verbatim to the result file to
+    # keep downstream parsers (diec JSON, exiftool, ...) intact.
+    if result.returncode != 0 or result.stderr:
+        print(f"Warning: '{shlex.join(command)}' exited with code "
+              f"{result.returncode}\n{result.stderr.strip()}")
     if output_file:
         if output_folder:
             output_path = os.path.join(output_folder, output_file)
@@ -459,7 +465,7 @@ def phase3(memdump_path, args, output_folder):
             if requires_pid: 
                 for pid in pid_list: # execute plugin for each pid
                     futures[executor.submit(run_volatility, plugin_name, memdump_file, pid, extra_args, output_folder)] = f"{plugin_name}_{pid}"
-            else: # execute plugin for whole memdump
+            else: # execute plugin for whole memdump
                 futures[executor.submit(run_volatility, plugin_name, memdump_file, None, extra_args, output_folder)] = plugin_name
 
         for future in as_completed(futures):

@@ -1,0 +1,9 @@
+---
+- name: Configure IOC Extractor environment on VM CAPE
+  hosts: cape_vm
+  become: false
+
+  roles:
+    - docker
+    - ioc-extractor
+    - capev2

@@ -6,6 +6,7 @@ import sys
 import hashlib
 import re
 import json
+import shlex
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import configparser
 import time
@@ -21,8 +22,10 @@ config.read('tools.ini')
 # Phase 1: Static Analysis
 # -------------------------
 def run_tool(command, output_file=None, output_folder=None):
-    print(f"Executing command: {command}")
-    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    # command is an argument list (no shell), so file paths and other
+    # interpolated values cannot be interpreted as shell metacharacters.
+    print(f"Executing command: {shlex.join(command)}")
+    result = subprocess.run(command, capture_output=True, text=True)
     if output_file:
         if output_folder:
             output_path = os.path.join(output_folder, output_file)
@@ -37,76 +40,82 @@ def avclass(file_path, output_folder, api_key):
         for byte_block in iter(lambda: f.read(4096),b""):
             sha256_hash.update(byte_block)
     sha256 = sha256_hash.hexdigest()
-    vt_command = f"curl https://www.virustotal.com/api/v3/files/{sha256} --header 'X-Apikey: {api_key}'"
+    vt_command = [
+        "curl", f"https://www.virustotal.com/api/v3/files/{sha256}",
+        "--header", f"X-Apikey: {api_key}",
+    ]
     run_tool(vt_command, output_file='virustotal_result.txt', output_folder=output_folder)
-    av_command = f"avclass -f {output_folder}/virustotal_result.txt"
+    av_command = ["avclass", "-f", os.path.join(output_folder, "virustotal_result.txt")]
     output = run_tool(av_command, output_file='avclass_result.txt', output_folder=output_folder)
     return output
 
 def capa(file_path, output_folder):
-    command = f"tools/capa -v {file_path}"
+    command = ["tools/capa", "-v", file_path]
     output = run_tool(command, output_file='capa_result.txt', output_folder=output_folder)
     return output
 
 def floss(file_path, output_folder):
-    command = f"floss --minimum-length 7 {file_path}"
+    command = ["floss", "--minimum-length", "7", file_path]
     output = run_tool(command, output_file='floss_result.txt', output_folder=output_folder)
     return output
 
 def exiftool(file_path, output_folder):
-    command = f"exiftool {file_path}"
+    command = ["exiftool", file_path]
     output = run_tool(command, output_file='exiftool_result.txt', output_folder=output_folder)
     return output
 
 def file(file_path, output_folder):
-    command = f"file {file_path}"
+    command = ["file", file_path]
     output = run_tool(command, output_file='file_result.txt', output_folder=output_folder)
     return output
 
 def strings(file_path, output_folder):
-    command = f"strings {file_path}"
+    command = ["strings", file_path]
     output = run_tool(command, output_file='strings_result.txt', output_folder=output_folder)
     return output
 
 def md5sum(file_path, output_folder):
-    command = f"md5sum {file_path}"
+    command = ["md5sum", file_path]
     output = run_tool(command, output_file='md5sum_result.txt', output_folder=output_folder)
     return output
 
 def sha256sum(file_path, output_folder):
-    command = f"sha256sum {file_path}"
+    command = ["sha256sum", file_path]
     output = run_tool(command, output_file='sha256sum_result.txt', output_folder=output_folder)
     return output
 
 def xxd(file_path, output_folder):
-    command = f"xxd {file_path}"
+    command = ["xxd", file_path]
     output = run_tool(command, output_file='xxd_result.txt', output_folder=output_folder)
     return output
 
 def yara(file_path, output_folder):
-    command = f"yara yara-rules-full.yar {file_path}"
+    command = ["yara", "yara-rules-full.yar", file_path]
     output = run_tool(command, output_file='yara_result.txt', output_folder=output_folder)
-    command = f"sed -i '/===== PROFILING INFORMATION =====/,$d' {output_folder}/yara_result.txt"
+    command = ["sed", "-i", "/===== PROFILING INFORMATION =====/,$d",
+               os.path.join(output_folder, "yara_result.txt")]
     output = run_tool(command, output_file=None, output_folder=None)
     return output
 
 def imphash(file_path, output_folder):
-    command = f"python -c \"import pefile, sys; print(pefile.PE(sys.argv[1]).get_imphash())\" {file_path}"
+    command = ["python", "-c",
+               "import pefile, sys; print(pefile.PE(sys.argv[1]).get_imphash())",
+               file_path]
     output = run_tool(command, output_file='imphash_result.txt', output_folder=output_folder)
     return output
 
 def rabin2(file_path, output_folder):
-    command = f"rabin2 -g {file_path}"
+    command = ["rabin2", "-g", file_path]
     output = run_tool(command, output_file='rabin2_result.txt', output_folder=output_folder)
     return output
 
 def diec(file_path, output_folder):
-    command = f"tools/Detect-It-Easy/docker/diec.sh -e -j {file_path}"
+    command = ["tools/Detect-It-Easy/docker/diec.sh", "-e", "-j", file_path]
     output = run_tool(command, output_file='diec_result.txt', output_folder=output_folder)
     return output
 
 def ssdeep(file_path, output_folder):
-    command = f"ssdeep {file_path}"
+    command = ["ssdeep", file_path]
     output = run_tool(command, output_file='ssdeep_result.txt', output_folder=output_folder)
     return output
 
@@ -237,11 +246,14 @@ def phase2(file_path, output_folder):
     print("======================================")
 
     # Get poetry executable for running CAPE
-    poetry_python = subprocess.run("poetry --directory /opt/CAPEv2/ env list --full-path", shell=True, capture_output=True, text=True).stdout.strip()
-    
+    poetry_python = subprocess.run(
+        ["poetry", "--directory", "/opt/CAPEv2/", "env", "list", "--full-path"],
+        capture_output=True, text=True).stdout.strip()
+
     # Run CAPE
-    command = f"{poetry_python}/bin/python /opt/CAPEv2/utils/submit.py --timeout 60 {file_path}"
-    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+    command = [f"{poetry_python}/bin/python", "/opt/CAPEv2/utils/submit.py",
+               "--timeout", "60", file_path]
+    result = subprocess.run(command, capture_output=True, text=True)
     match = re.search(r'ID (\d+)', result.stdout)
     if not match:
         raise RuntimeError(
@@ -309,13 +321,14 @@ def apply_filters(plugin_name, output):
 def run_volatility(plugin_name, memdump_file, pid=None, extra_args=None, output_folder=None):
     dumps_folder = f"{output_folder}/dumps" # used for plugins with --dump
     os.makedirs(dumps_folder, exist_ok=True)
-    command = f"./tools/volatility3/vol.py -q -f {memdump_file} -o {dumps_folder} {plugin_name}"
+    command = ["./tools/volatility3/vol.py", "-q", "-f", memdump_file,
+               "-o", dumps_folder, plugin_name]
     if pid:
-        command += f" --pid {pid}"
+        command += ["--pid", str(pid)]
     if extra_args:
-        command += f" {extra_args}"
-    print(f"Executing command: {command}")  # Debugging info
-    result = subprocess.run(command, shell=True, capture_output=True, text=True)
+        command += shlex.split(extra_args)
+    print(f"Executing command: {shlex.join(command)}")  # Debugging info
+    result = subprocess.run(command, capture_output=True, text=True)
     if output_folder:
         raw_output_folder = f"{output_folder}/raw"
         filtered_output_folder = f"{output_folder}/filtered"
@@ -336,9 +349,10 @@ def run_volatility(plugin_name, memdump_file, pid=None, extra_args=None, output_
 def get_pids(memdump_file):
     try:
         # Get PID of pyw.exe (CAPE agent)
-        command = f"./tools/volatility3/vol.py -f {memdump_file} -r json windows.pslist.PsList"
-        print(f"Executing command: {command}")
-        pslist_result = subprocess.run(command, capture_output=True, shell=True, text=True)
+        command = ["./tools/volatility3/vol.py", "-f", memdump_file,
+                   "-r", "json", "windows.pslist.PsList"]
+        print(f"Executing command: {shlex.join(command)}")
+        pslist_result = subprocess.run(command, capture_output=True, text=True)
         processes = json.loads(pslist_result.stdout)
         pyw_pid = None
         for proc in processes:
@@ -350,8 +364,9 @@ def get_pids(memdump_file):
             return []
         
         # Get process tree of pyw.exe
-        command = f"./tools/volatility3/vol.py -f {memdump_file} -r json windows.pstree.PsTree --pid {str(pyw_pid)}"
-        pstree_result = subprocess.run(command, capture_output=True, shell=True, text=True)
+        command = ["./tools/volatility3/vol.py", "-f", memdump_file,
+                   "-r", "json", "windows.pstree.PsTree", "--pid", str(pyw_pid)]
+        pstree_result = subprocess.run(command, capture_output=True, text=True)
         pstree = json.loads(pstree_result.stdout)
         
         children_pids = []
@@ -380,8 +395,8 @@ def get_pids(memdump_file):
 def prepare_dump(memdump_path):
     memdump_dir = os.path.dirname(memdump_path)
     memdump_file = os.path.join(memdump_dir, "memdump.raw")
-    command = f"zstdcat {memdump_path} > {memdump_file}"
-    subprocess.run(command, capture_output=True, shell=True)
+    with open(memdump_file, "wb") as out:
+        subprocess.run(["zstdcat", memdump_path], stdout=out, stderr=subprocess.PIPE)
     if os.path.exists(memdump_file):
         print("Memory dump file ready to process.")
         return memdump_file
@@ -526,7 +541,7 @@ def generate_report(args):
         return "\n".join(result)
 
     def memory_forensics():
-        result = subprocess.run(f"tree -h {memory_dir}", shell=True, text=True, capture_output=True, check=True)
+        result = subprocess.run(["tree", "-h", memory_dir], text=True, capture_output=True, check=True)
         return f"\n#### Phase 3: Memory Forensics ####\n\n{result.stdout}\n"
 
     # Generate the complete report

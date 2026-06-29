@@ -1,0 +1,45 @@
+---
+- name: Check if Docker is installed
+  command: docker --version
+  register: docker_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Show Docker version
+  debug:
+    msg: "Docker installed: {{ docker_check.stdout }}"
+  when: docker_check.rc == 0
+
+- name: Fail if Docker is not installed
+  fail:
+    msg: "Docker not found on VM 161. Install Docker rootless manually."
+  when: docker_check.rc != 0
+
+- name: Check Docker rootless daemon via systemd user session
+  command: systemctl --user is-active docker.service
+  register: docker_daemon
+  ignore_errors: true
+  changed_when: false
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/999"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/999/bus"
+
+- name: Start Docker rootless daemon if not running
+  command: systemctl --user start docker.service
+  when: docker_daemon.stdout != 'active'
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/999"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/999/bus"
+
+- name: Verify Docker daemon responds after start
+  command: docker info
+  register: docker_info
+  changed_when: false
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/999"
+    DOCKER_HOST: "unix:///run/user/999/docker.sock"
+
+- name: Confirm Docker daemon OK
+  debug:
+    msg: "Docker rootless daemon: OK"
+  when: docker_info.rc == 0

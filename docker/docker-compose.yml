@@ -1,0 +1,25 @@
+services:
+  # Servicio para el Análisis Estático (Fase 1)
+  fase1-estatico:
+    image: fase1-estatico:latest
+    container_name: ioc_fase1_container
+    user: "${CURRENT_UID:-999}:${CURRENT_GID:-999}"
+    volumes:
+      - ${MALWARE_INPUT_DIR:-/opt/ioc-extractor/bin_samples}:/input:ro
+      - ${ANALYSIS_OUTPUT_DIR:-/opt/ioc-extractor/bin_outputs}:/output:rw
+      - ${YARA_RULES_PATH:-/opt/ioc-extractor/yara-rules-full.yar}:/rules/yara-rules-full.yar:ro
+    environment:
+      - PYTHONUNBUFFERED=1
+    network_mode: "none"
+
+  # Servicio para el Análisis Forense de Memoria (Fase 3)
+  fase3-forense:
+    image: fase3-forense:latest
+    container_name: ioc_fase3_container
+    user: "${CURRENT_UID:-999}:${CURRENT_GID:-999}"
+    volumes:
+      - ${MEMDUMPS_DIR:-/opt/CAPEv2/storage/analyses}:/dumps:ro
+      - ${ANALYSIS_OUTPUT_DIR:-/opt/ioc-extractor/bin_outputs}:/output:rw
+    environment:
+      - PYTHONUNBUFFERED=1
+    network_mode: "none"

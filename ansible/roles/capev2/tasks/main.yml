@@ -1,0 +1,22 @@
+---
+- name: Check CAPEv2 services status
+  command: systemctl is-active {{ item }}
+  register: cape_services
+  ignore_errors: true
+  changed_when: false
+  loop:
+    - cape.service
+    - cape-processor.service
+    - cape-web.service
+    - cape-rooter.service
+
+- name: Report CAPEv2 services
+  debug:
+    msg: "{{ item.item }}: {{ item.stdout }}"
+  loop: "{{ cape_services.results }}"
+
+- name: Fail if any CAPEv2 service is down
+  fail:
+    msg: "Service {{ item.item }} is not active (status: {{ item.stdout }})"
+  when: item.stdout != 'active'
+  loop: "{{ cape_services.results }}"

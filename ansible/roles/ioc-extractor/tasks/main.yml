@@ -1,0 +1,54 @@
+---
+- name: Ensure /opt/ioc-extractor exists
+  file:
+    path: /opt/ioc-extractor
+    state: directory
+    owner: cape
+    group: cape
+    mode: '0755'
+
+- name: Copy docker-compose.yml to VM
+  copy:
+    src: /extra2/ioc-deploy/docker/docker-compose.yml
+    dest: /opt/ioc-extractor/docker-compose.yml
+    owner: cape
+    group: cape
+    mode: '0644'
+
+- name: Copy .env.example to VM
+  copy:
+    src: /extra2/ioc-deploy/docker/.env.example
+    dest: /opt/ioc-extractor/.env.example
+    owner: cape
+    group: cape
+    mode: '0644'
+
+- name: Verify docker-compose.yml was copied
+  stat:
+    path: /opt/ioc-extractor/docker-compose.yml
+  register: compose_stat
+
+- name: Report docker-compose.yml size
+  debug:
+    msg: "docker-compose.yml: {{ compose_stat.stat.size }} bytes OK"
+  when: compose_stat.stat.exists
+
+- name: Check fase1-estatico image exists
+  command: docker image inspect fase1-estatico:latest
+  register: fase1_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Report fase1-estatico status
+  debug:
+    msg: "{{ 'fase1-estatico:latest OK' if fase1_check.rc == 0 else 'WARNING: fase1-estatico:latest missing' }}"
+
+- name: Check fase3-forense image exists
+  command: docker image inspect fase3-forense:latest
+  register: fase3_check
+  ignore_errors: true
+  changed_when: false
+
+- name: Report fase3-forense status
+  debug:
+    msg: "{{ 'fase3-forense:latest OK' if fase3_check.rc == 0 else 'WARNING: fase3-forense:latest missing' }}"

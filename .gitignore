@@ -269,3 +269,7 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,macos,windows,linux,python
+bin_samples/
+bin_outputs/
+__pycache__/
+utils/__pycache__/

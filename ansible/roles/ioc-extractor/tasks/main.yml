@@ -33,22 +33,22 @@
     msg: "docker-compose.yml: {{ compose_stat.stat.size }} bytes OK"
   when: compose_stat.stat.exists
 
-- name: Check fase1-estatico image exists
-  command: docker image inspect fase1-estatico:latest
+- name: Check static-analysis image exists
+  command: docker image inspect static-analysis:latest
   register: fase1_check
   ignore_errors: true
   changed_when: false
 
-- name: Report fase1-estatico status
+- name: Report static-analysis status
   debug:
-    msg: "{{ 'fase1-estatico:latest OK' if fase1_check.rc == 0 else 'WARNING: fase1-estatico:latest missing' }}"
+    msg: "{{ 'static-analysis:latest OK' if fase1_check.rc == 0 else 'WARNING: static-analysis:latest missing' }}"
 
-- name: Check fase3-forense image exists
-  command: docker image inspect fase3-forense:latest
+- name: Check memory-forensics image exists
+  command: docker image inspect memory-forensics:latest
   register: fase3_check
   ignore_errors: true
   changed_when: false
 
-- name: Report fase3-forense status
+- name: Report memory-forensics status
   debug:
-    msg: "{{ 'fase3-forense:latest OK' if fase3_check.rc == 0 else 'WARNING: fase3-forense:latest missing' }}"
+    msg: "{{ 'memory-forensics:latest OK' if fase3_check.rc == 0 else 'WARNING: memory-forensics:latest missing' }}"

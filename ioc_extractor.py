@@ -1,7 +1,7 @@
+#!/usr/bin/env python3
 import shlex
 import requests
 import time
-#!/usr/bin/env python
 import argparse
 import subprocess
 import os
@@ -11,7 +11,6 @@ import re
 import json
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import configparser
-import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
 from prettytable import PrettyTable
@@ -21,16 +20,16 @@ config = configparser.ConfigParser()
 config.optionxform = str
 config.read('tools.ini')
 
-# Variables globales para Docker (IaC)
+# Global Docker configuration variables (IaC)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DOCKER_IMAGE_FASE1 = "fase1-estatico:latest"
-DOCKER_IMAGE_FASE3 = "fase3-forense:latest"
+DOCKER_IMAGE_FASE1 = "static-analysis:latest"
+DOCKER_IMAGE_FASE3 = "memory-forensics:latest"
 
 # -------------------------
 # Phase 1: Static Analysis
 # -------------------------
 def run_tool(command, output_file=None, output_folder=None):
-    """Ejecución clásica local (para tools no dockerizadas como strings o curl)"""
+    """Local execution runner (for non-dockerized tools such as strings or curl)"""
     print(f"Executing local command: {command}")
     result = subprocess.run(shlex.split(command) if isinstance(command, str) else command, capture_output=True, text=True)
     if output_file and output_folder:
@@ -40,24 +39,24 @@ def run_tool(command, output_file=None, output_folder=None):
     return result.stdout
 
 def run_tool_docker_phase1(cmd_inside_container, file_path, output_folder, output_file=None):
-    """Envoltorio centralizado para ejecutar herramientas estáticas en Docker"""
+    """Centralized wrapper to run static analysis tools inside Docker containers"""
     input_dir = os.path.dirname(os.path.abspath(file_path))
     filename = os.path.basename(file_path)
     out_dir = os.path.abspath(output_folder)
     
     os.makedirs(out_dir, exist_ok=True)
-    # TRUCO DEVOPS: Evitar problemas de Rootless Docker dando permisos temporales al directorio
+    # DEVOPS: Temporarily grant write permissions to avoid Rootless Docker permission issues
     os.chmod(out_dir, 0o777) 
     
     docker_cmd = (
         f"MALWARE_INPUT_DIR='{input_dir}' "
         f"ANALYSIS_OUTPUT_DIR='{out_dir}' "
-        f"docker compose run --rm fase1-estatico "
+        f"docker compose run --rm static-analysis "
         f"{cmd_inside_container.format(input_file='/input/' + filename)}"
     )
     print(f"Executing compose: {docker_cmd}")
     
-    # TRUCO DEVOPS: Rootless Docker UID 999 para que no falle por SSH
+    # DEVOPS: Set Rootless Docker UID 999 to avoid SSH session permission failures
     import os
     os.environ["XDG_RUNTIME_DIR"] = "/run/user/999"
     os.environ["DOCKER_HOST"] = "unix:///run/user/999/docker.sock"
@@ -85,11 +84,11 @@ def avclass(file_path, output_folder, api_key):
     out_dir = os.path.abspath(output_folder)
     os.chmod(out_dir, 0o777)
     
-    # AVClass lee el json descargado previamente usando Compose
-    docker_cmd = f"ANALYSIS_OUTPUT_DIR='{out_dir}' docker compose run --rm fase1-estatico avclass -f /output/virustotal_result.txt"
+    # AVClass reads the previously downloaded VT JSON using Docker Compose
+    docker_cmd = f"ANALYSIS_OUTPUT_DIR='{out_dir}' docker compose run --rm static-analysis avclass -f /output/virustotal_result.txt"
     print(f"Executing compose: {docker_cmd}")
     
-    # TRUCO DEVOPS: Rootless Docker UID 999 para que no falle por SSH
+    # DEVOPS: Set Rootless Docker UID 999 to avoid SSH session permission failures
     import os
     os.environ["XDG_RUNTIME_DIR"] = "/run/user/999"
     os.environ["DOCKER_HOST"] = "unix:///run/user/999/docker.sock"
@@ -371,7 +370,7 @@ def run_volatility(plugin_name, memdump_file, pid=None, extra_args=None, output_
     env["ANALYSIS_OUTPUT_DIR"] = dumps_folder
     
     # 2. Comando puro (El entrypoint ya tiene python3 /volatility3/vol.py)
-    cmd = ["docker", "compose", "run", "--rm", "fase3-forense", "-q", "-f", f"/dumps/{memdump_filename}", "-o", "/output", plugin_name]
+    cmd = ["docker", "compose", "run", "--rm", "memory-forensics", "-q", "-f", f"/dumps/{memdump_filename}", "-o", "/output", plugin_name]
     if pid:
         cmd.extend(["--pid", str(pid)])
     if extra_args:
@@ -402,7 +401,7 @@ def get_pids(memdump_file):
         env["DOCKER_HOST"] = "unix:///run/user/999/docker.sock"
         env["MEMDUMPS_DIR"] = memdump_dir
         
-        cmd = ["docker", "compose", "run", "--rm", "fase3-forense", "-q", "-f", f"/dumps/{memdump_filename}", "-r", "json"] + shlex.split(cmd_suffix)
+        cmd = ["docker", "compose", "run", "--rm", "memory-forensics", "-q", "-f", f"/dumps/{memdump_filename}", "-r", "json"] + shlex.split(cmd_suffix)
         
         r = subprocess.run(cmd, env=env, capture_output=True, text=True)
         out = (r.stdout or "").strip()
